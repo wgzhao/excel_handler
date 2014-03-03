@@ -1,91 +1,20 @@
 #!/usr/bin/env python
-# -*- coding:gbk -*-
+# -*- coding:utf-8 -*-
 __author__ = 'wgzhao<wgzhao@gmail.com>'
 
 from Tkinter import *
 import tkFileDialog
-import xlrd 
-import xlwt
-from xlwt import easyxf
+import os
 import win32com.client as win32
-#湖南省主变PMS台帐参数说明
-#key为参数名称，value为参数允许的值，大小写敏感，除此之外，还有以下条件
-#1. 运行编号应与设备名称一致，如果设备名称为'#1主变'，则运行编号必须为'#1主变压器'
-#2. 间隔单元必须与设备名称一致
-#3. 额定电压和电压等级存在映射关系，条件如下：
-##    1、“电压等级”为交流220kV对应有242、230、220，以外为不合格数据；
-##    2、“电压等级”为交流110kV对应有121、110，以外为不合格数据；
-##    3、“电压等级”为交流35kV对应有38.5、35，以外为不合格数据；"
-#4. 设备型号和电压等级有映射关系，关系如下：
-##         1、“电压等级”为交流220kV数据末尾对应有180000/220、120000/220、240000/220，以外为不合格数据；
-##        2、“电压等级”为交流110kV数据末尾对应有20000/110、31500/110、50000/110，以外为不合格数据；
-##        3、“电压等级”为交流35kV数据末尾对应有3150/35、4000/35、5000/35、6300/35、10000/35，以外为不合格数据
+import sys
+codec=sys.getfilesystemencoding()
 
 
-#########
-#列顺序
-# 设备名称
-# 运行编号
-# 所属市局
-# 运行单位
-# 变电站
-# 资产性质
-# 资产单位
-# 设备类型
-# 电压等级
-# 间隔单元
-# 相数
-# 相别
-# 额定电压(kV)
-# 额定电流(A)
-# 额定频率(Hz)
-# 设备型号
-# 生产厂家
-# 出厂编号
-# 产品代号
-# 制造国家
-# 出厂日期
-# 投运日期
-# 使用环境
-# 绝缘耐热等级
-# 资产编号
-# 用途
-# 绝缘介质
-# 绕组型式
-# 结构型式
-# 冷却方式
-# 调压方式
-# 安装位置
-# 额定容量(MVA)
-# 自冷却容量(%)
-# 电压比
-# 额定电流(中压)(A)
-# 额定电流(低压)(A)
-# 短路阻抗高压－中压(%)
-# 短路阻抗高压－低压(%)
-# 短路阻抗中压－低压(%)
-# 空载损耗(kV)
-# 负载损耗(实测值)(满载)(kW)
-# 自然冷却噪声(dB)
-# 总重(T)
-# 油号
-# 油重
-# 油产地
-# SF6气体额定压力(Mpa)
-# SF6气体报警压力(Mpa)
-# 运行状态
-# 最近投运日期
-# 累计调档次数
-# 备注
-# 退运日期
-# 审核状态
-# 设备编码
-
-pms={'设备名称':{'#1主变','#2主变','#3主变'},'运行编号':{'#1主变压器','#2主变压器','#3主变压器'},'资产性质':{'省（直辖市、自治区）公司'},
-    '资产单位':{'国网湖南省电力公司','湖南省电力公司'},'电压等级':{'交流220kV','交流110kV','交流35kV'},'间隔单元':{'#1主变','#2主变','#3主变'},
-    '相数':{'三相'},'相别':{'ABC相'},'自造国家':{'中国'},'使用环境':{'户外式'},'绝缘耐热等级':{'A','B'},'用途':{'降压变压器'},
-    '结构形式':'芯式','冷却方式':{'强迫油循环导向风冷(ODAF)','自然油循环风冷(ONAF)','自然冷却(ONAN'},'调压方式':{'有载调压','无励磁调压'},
-        }
+ERROR_COLOR=27
+pms={'1':[u'#1主变',u'#2主变',u'#3主变'],'2':[u'#1主变压器',u'#2主变压器',u'#3主变压器'],'6':u'省（直辖市、自治区）公司',
+    '7':[u'国网湖南省电力公司',u'湖南省电力公司'],'9':[u'交流220kV',u'交流110kV',u'交流35kV'],'相数':u'三相','相别':u'ABC相',
+    '自造国家':u'中国','使用环境':u'户外式','绝缘耐热等级':[u'A',u'B'],'用途':u'降压变压器',
+    '结构形式':u'芯式','冷却方式':[u'强迫油循环导向风冷(ODAF)',u'自然油循环风冷(ONAF)',u'自然冷却(ONAN'],'调压方式':[u'有载调压',u'无励磁调压']}
 
 def _pms_validate(filename):
     #Excel表格应该共有56列
@@ -98,16 +27,54 @@ def _pms_validate(filename):
     
     
     return (True,None)
-
-def pms_validate(filename):
-    excel = win32.gencache.EnsureDispatch('Excel.Application')
-    wb = excel.Workbooks.Open(filename)
-    # Alternately, specify the full path to the workbook 
-    # wb = excel.Workbooks.Open(r'C:\myfiles\excel\workbook2.xlsx')
-    excel.Visible = False
     
-    wb.Cells(1,1).Interior.ColorIndex = 2
-    execel.Application.Quit()
+class PmsValidate():
+    def __init__(self,filename):
+        self.excel = win32.gencache.EnsureDispatch('Excel.Application')
+        self.wb = self.excel.Workbooks.Open(filename)
+        self.excel.Visible = False
+        self.ws = self.wb.Worksheets(1)
+        self.ws.Activate()
+        self.nrows = self.ws.UsedRange.Rows.Count
+        self.ncols = self.ws.UsedRange.Columns.Count
+        
+    def _getcell(self,row,col):
+        cellValue = self.ws.Cells(row,col).Value
+        return cellValue
+
+    
+    def pms_validate(self):
+        err_cells = []
+        #skip header
+        for row in range(3,self.nrows + 1):
+            #1. 设备名称  
+            cell11=self._getcell(row,1)
+            if cell11 not in pms['1']:
+                err_cells.append((row,1))
+            #2. 运行编号
+            cell12 = self._getcell(row,2)
+            if cell12 not in pms['2']:
+                err_cells.append((row,2))
+            elif cell12 != cell11[:4] + u'压器':
+                err_cells.append((row,2))
+            
+            #6. 资产性质
+            if self._getcell(row,6)!= pms['6']:
+                err_cells.append((row,6))
+        
+            #7. 资产单位
+            if self._getcell(row,7) not in  pms['7']:
+                err_cells.append((row,7))
+       
+            #9. 电压等级    
+            if self._getcell(row,9) not in  pms['9']:
+                err_cells.append((row,9))
+        #highligh error cells
+        if len(err_cells):
+            for cell in err_cells:
+                self.ws.Cells(cell[0],cell[1]).Interior.ColorIndex = ERROR_COLOR
+            self.wb.Save()
+        self.excel.Application.Quit()
     
 class ExcelHandler():
 
@@ -159,5 +126,7 @@ class ExcelHandler():
 if __name__ == '__main__':
     #handler= ExcelHandler('600x400')
     #test code
-    pms_validate('E:\Codes\mygithub\excel_handler\主变压器.xls')
+    curdir=os.getcwd()
+    pmshandler = PmsValidate(os.path.join(curdir,u'主变压器.xls'))
+    pmshandler.pms_validate()
 
