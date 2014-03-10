@@ -8,6 +8,7 @@ import os
 import win32com.client as win32
 import sys
 import time
+import shutil
 codec=sys.getfilesystemencoding()
 
 ERROR_COLOR=27
@@ -15,9 +16,13 @@ DEBUG = True
     
 class PmsValidate():
     
-    def __init__(self,filename):
+    def __init__(self,filepath):
+        #duplicate filname
+        filename,fileext = os.path.splitext(filepath)
+        newfilepath = filename + u'_valid' + fileext
+        shutil.copyfile(filepath,newfilepath)
         self.excel = win32.gencache.EnsureDispatch('Excel.Application')
-        self.wb = self.excel.Workbooks.Open(filename)
+        self.wb = self.excel.Workbooks.Open(newfilepath)
         self.excel.Visible = False
         self.ws = self.wb.Worksheets(1)
         self.ws.Activate()
@@ -57,13 +62,15 @@ class PmsValidate():
         err_cells = []
         #错误行数
         total_error_lines = 0
-
+        #出产编号，用于校验是否有重复的出厂编号,为保证下标从2开始，前两个元素虚构
+        ccbh_list = ['the column should not match','this is sheet header,ignore it']
+        
         #skip header
         fd = open('validate.log','w')
         for row in range(2,self.nrows + 1):
-    
+            
             fd.write("validating %d/%d\n" % (row,self.nrows))
-            #print "validating %d/%d" % (row,self.nrows)
+                 #print "validating %d/%d" % (row,self.nrows)
             the_line_is_error = False
             #电压等级值是否正确，该值后面用的较多，需要进行比较，如果电压等级值本身不正确，那么后面的基于它的校验就没有意义，直接跳过
             dydj_valid = True
@@ -178,11 +185,21 @@ class PmsValidate():
             #18. 出厂编号
             ##1、空白为不合格数据；
             ##2、重复出现的为不合格数据 
-            # FIXME: 
-            if self._getcell(row,18) == '':
+            ccbh = self._getcell(row,18) 
+            if  ccbh == '':
                 err_cells.append((row,18))
                 the_line_is_error = True
-            
+            else:
+                try:
+                    duprow = ccbh_list.index(ccbh)
+                    #编号有重复把重复的单元都标记出来
+                    err_cells.append((duprow,18))
+                    err_cells.append((row,18))
+
+                except ValueError:
+                    ccbh_list.append(ccbh)
+                    
+                    
             #20. 制造国家
             ## 中国以外为不合格数据
             if self._getcell(row,20) != self.pms['20']:
@@ -665,6 +682,9 @@ class ExcelHandler():
 if __name__ == '__main__':
     #handler= ExcelHandler('600x400')
     #test code
+    begin_time = time.time()
     curdir=os.getcwd()
     pmshandler = PmsValidate(os.path.join(curdir,u'主变压器.xls'))
     pmshandler.pms_validate()
+    estime = time.time() - begin_time
+    print "total use %.1f seconds" % estime
