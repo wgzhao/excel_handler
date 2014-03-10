@@ -7,7 +7,7 @@ py2exe_opts = dict(
             ascii = True,
             compressed = True,
             optimize = 0,
-            #bundle_files = 3,
+            bundle_files = 1,
             excludes = ['_ssl','pyreadline','difflib','doctest','locale','optparse','pickle','calendar']
 )
 
