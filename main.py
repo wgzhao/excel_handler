@@ -5,30 +5,40 @@ __author__ = 'wgzhao<wgzhao@gmail.com>'
 from Tkinter import *
 import tkFileDialog
 import os
-import win32com.client as win32
+#import win32com.client as win32
+import xlrd
+from xlwt import Workbook,easyxf
+from  xlutils.copy import copy
 import sys
 import time
 import shutil
+import collections
 codec=sys.getfilesystemencoding()
-
+reload(sys) 
+sys.setdefaultencoding("utf-8")
+__version__ = 1.0
 ERROR_COLOR=27
 DEBUG = True
-    
+
+ERROR_STYLE = easyxf('pattern:pattern solid,fore_colour yellow;')    
 class PmsValidate():
     
     def __init__(self,filepath):
         #duplicate filname
         filename,fileext = os.path.splitext(filepath)
-        newfilepath = filename + u'_valid' + fileext
-        shutil.copyfile(filepath,newfilepath)
-        self.excel = win32.gencache.EnsureDispatch('Excel.Application')
-        self.wb = self.excel.Workbooks.Open(newfilepath)
-        self.excel.Visible = False
-        self.ws = self.wb.Worksheets(1)
-        self.ws.Activate()
-        self.nrows = self.ws.UsedRange.Rows.Count
-        self.ncols = self.ws.UsedRange.Columns.Count
-        
+        self.newfilepath = filename + u'_valid' + fileext
+        #shutil.copyfile(filepath,self.newfilepath)
+        # self.excel = win32.gencache.EnsureDispatch('Excel.Application')
+        # self.wb = self.excel.Workbooks.Open(newfilepath)
+        # self.excel.Visible = False
+        # self.ws = self.wb.Worksheets(1)
+        # self.ws.Activate()
+        # self.nrows = self.ws.UsedRange.Rows.Count
+        # self.ncols = self.ws.UsedRange.Columns.Count
+        self.wb = xlrd.open_workbook(filepath,formatting_info=True)
+        self.ws = self.wb.sheet_by_index(0)
+        self.nrows = self.ws.nrows
+        self.ncols = self.ws.ncols
         # 基本校验规则
         self.pms={'1':[u'#1主变',u'#2主变',u'#3主变'],'2':[u'#1主变压器',u'#2主变压器',u'#3主变压器'],'6':u'省（直辖市、自治区）公司',
             '7':[u'国网湖南省电力公司',u'湖南省电力公司'],'9':[u'交流220kV',u'交流110kV',u'交流35kV'],'11':u'三相','12':u'ABC相',
@@ -45,8 +55,7 @@ class PmsValidate():
                          u'交流35kV':['3150/35','4000/35','5000/35','6300/35','10000/35']}
   
     def _getcell(self,row,col):
-        cellValue = self.ws.Cells(row,col).Value.strip()
-        return cellValue
+        return  self.ws.cell(row,col).value.strip()
 
     def _isnumber(self,s):
         #一个字符串是否是数字
@@ -62,12 +71,12 @@ class PmsValidate():
         err_cells = []
         #错误行数
         total_error_lines = 0
-        #出产编号，用于校验是否有重复的出厂编号,为保证下标从2开始，前两个元素虚构
-        ccbh_list = ['the column should not match','this is sheet header,ignore it']
+        #出产编号，用于校验是否有重复的出厂编号,为保证下标从1开始,第一个元素为虚构元素
+        ccbh_list = ['this is sheet header,ignore it']
         
         #skip header
         fd = open('validate.log','w')
-        for row in range(2,self.nrows + 1):
+        for row in range(1,self.nrows):
             
             fd.write("validating %d/%d\n" % (row,self.nrows))
                  #print "validating %d/%d" % (row,self.nrows)
@@ -85,46 +94,46 @@ class PmsValidate():
             #绕阻型式是否正确
             rzxs_valid = True
             #1. 设备名称  "#1主变、#2主变、#3主变 以外为不合格数据
-            cell11=self._getcell(row,1)
+            cell11=self._getcell(row,0)
             if cell11 not in self.pms['1']:
-                err_cells.append((row,1))
+                err_cells.append((row,0))
                 the_line_is_error = True
             #2. 运行编号
             ##1、#1主变压器、#2主变压器、#3主变压器以外为不合格数据；
             ##2、与设备名称不一致为不合格数据"
-            cell12 = self._getcell(row,2)
+            cell12 = self._getcell(row,1)
             if cell12 not in self.pms['2']:
-                err_cells.append((row,2))
+                err_cells.append((row,1))
                 the_line_is_error = True
                 
             elif cell12 != cell11[:4] + u'压器':
-                err_cells.append((row,2))
+                err_cells.append((row,1))
                 the_line_is_error = True
                 
             #6. 资产性质  "省（直辖市、自治区）公司" 以外为不合格数据；
-            if self._getcell(row,6)!= self.pms['6']:
-                err_cells.append((row,6))
+            if self._getcell(row,5)!= self.pms['6']:
+                err_cells.append((row,5))
                 the_line_is_error = True
         
             #7. 资产单位  "国网湖南省电力公司、湖南省电力公司" 以外为不合格数据
-            if self._getcell(row,7) not in  self.pms['7']:
-                err_cells.append((row,7))
+            if self._getcell(row,6) not in  self.pms['7']:
+                err_cells.append((row,6))
                 the_line_is_error = True
        
             #9. 电压等级   "交流220kV、交流110kV、交流35kV" 以外为不合格数据
-            dydj = self._getcell(row,9)
+            dydj = self._getcell(row,8)
             if dydj not in  self.pms['9']:
                 dydj_valid = False
-                err_cells.append((row,9))
+                err_cells.append((row,8))
                 the_line_is_error = True
                 
             #11. 相数 三相以外为不合格数据
-            if self._getcell(row,11) != self.pms['11']:
-                err_cells.append((row,11))
+            if self._getcell(row,10) != self.pms['11']:
+                err_cells.append((row,10))
                 the_line_is_error = True
             #12. 相别  ABC相以外为不合格数据
-            if self._getcell(row,12) != self.pms['12']:
-                err_cells.append((row,12))
+            if self._getcell(row,11) != self.pms['12']:
+                err_cells.append((row,11))
                 the_line_is_error = True
             
             #13. 额定电压
@@ -132,7 +141,7 @@ class PmsValidate():
             ## 1、“电压等级”为交流220kV对应有242、230、220，以外为不合格数据；
             ## 2、“电压等级”为交流110kV对应有121、110，以外为不合格数据；
             ## 3、“电压等级”为交流35kV对应有38.5、35，以外为不合格数据；
-            eddy = self._getcell(row,13)
+            eddy = self._getcell(row,12)
             result = True
             if self._isnumber(eddy):
                 if (dydj_valid and eddy not in self.eddy_dict[dydj]):
@@ -143,13 +152,13 @@ class PmsValidate():
                 result = False
                 
             if result == False:
-                err_cells.append((row,13))
+                err_cells.append((row,12))
                 the_line_is_error = True              
             
             #15. 额定频率
             ## 50以外为不合格数据
-            if int(self._getcell(row,15)) != 50:
-                err_cells.append((row,15))
+            if int(self._getcell(row,14)) != 50:
+                err_cells.append((row,14))
                 the_line_is_error = True
                 
             #16. 设备型号               
@@ -159,42 +168,42 @@ class PmsValidate():
             ##3 “电压等级”为交流35kV数据末尾对应有3150/35、4000/35、5000/35、6300/35、10000/35，以外为不合格数据；
             ## 设备型号类似 SFSZ10-180000/220  或 SSZ10-Z60-20000/110
             #################################################################################################
-            sbxh = self._getcell(row,16)
+            sbxh = self._getcell(row,15)
             try:
                 sbxh_suffix = sbxh.split('-')[-1] #last item
                 
                 if dydj in self.pms['9'] and  sbxh_suffix not in self.sbxh_dict[dydj]:
                     sbxh_valid = False
-                    err_cells.append((row,16))
+                    err_cells.append((row,15))
                     the_line_is_error = True
                         
             except Exception,err:
                 sbxh_valid = False
-                err_cells.append((row,16))
+                err_cells.append((row,15))
                 the_line_is_error = True
                 
             #17. 生产厂家
             ##"1、空白为不合格数据；
             ##2、小于6个字的为不合格数据"    
-            xccj = self._getcell(row,17)
+            xccj = self._getcell(row,16)
             if xccj == '' or len(xccj) < 6:
-                err_cells.append((row,17))
+                err_cells.append((row,16))
                 the_line_is_error = True
 
                 
             #18. 出厂编号
             ##1、空白为不合格数据；
             ##2、重复出现的为不合格数据 
-            ccbh = self._getcell(row,18) 
+            ccbh = self._getcell(row,17) 
             if  ccbh == '':
-                err_cells.append((row,18))
+                err_cells.append((row,17))
                 the_line_is_error = True
             else:
                 try:
                     duprow = ccbh_list.index(ccbh)
                     #编号有重复把重复的单元都标记出来
-                    err_cells.append((duprow,18))
-                    err_cells.append((row,18))
+                    err_cells.append((duprow,17))
+                    err_cells.append((row,17))
 
                 except ValueError:
                     ccbh_list.append(ccbh)
@@ -202,22 +211,22 @@ class PmsValidate():
                     
             #20. 制造国家
             ## 中国以外为不合格数据
-            if self._getcell(row,20) != self.pms['20']:
-                err_cells.append((row,18))
+            if self._getcell(row,19) != self.pms['20']:
+                err_cells.append((row,19))
                 the_line_is_error = True
             
             #21. 出厂日期
             ## 空白为不合格数据
             ccrq_ts = False
-            ccrq = self._getcell(row,21) 
-            if self._getcell(row,21) == '':
-                err_cells.append((row,21))
+            ccrq = self._getcell(row,20) 
+            if self._getcell(row,20) == '':
+                err_cells.append((row,20))
                 the_line_is_error = True
             else:
                 try:
                     ccrq_ts = time.mktime(time.strptime(ccrq,'%Y-%m-%d %H:%M:%S'))
                 except Exception,err:
-                    err_cells.append((row,21))
+                    err_cells.append((row,20))
                     the_line_is_error = True
                     ccrq_ts = False
 
@@ -226,92 +235,92 @@ class PmsValidate():
             #2、小于“出厂日期”10天以上为不合格数据"
             tendays = 86400
             #把出厂日期和投运日期都转成时间戳，然后进行比较
-            tyrq = self._getcell(row,22)
+            tyrq = self._getcell(row,21)
             if tyrq == '':
-                err_cells.append((row,22))
+                err_cells.append((row,21))
                 the_line_is_error = True
             else:
                 try:
                     tyrq_ts = time.mktime(time.strptime(tyrq,'%Y-%m-%d %H:%M:%S'))
                 except Exception,err:
-                    err_cells.append((row,22))
+                    err_cells.append((row,21))
                     the_line_is_error = True
                     tyrq_ts = False
                 if tyrq_ts  and ccrq_ts  and (tyrq_ts - ccrq_ts) < tendays:
-                     err_cells.append((row,22))
+                     err_cells.append((row,21))
                      the_line_is_error = True
     
             #23. 使用环境
             ## 户外式以外为不合格数据
-            if self._getcell(row,23) != self.pms['23']:
-                err_cells.append((row,23))
+            if self._getcell(row,22) != self.pms['23']:
+                err_cells.append((row,22))
                 the_line_is_error = True
             
             #24. 绝缘耐热等级
             ## A或B以外为不合格数据
-            if self._getcell(row,24) not in  self.pms['24']:
-                err_cells.append((row,24))
+            if self._getcell(row,23) not in  self.pms['24']:
+                err_cells.append((row,23))
                 the_line_is_error = True
                 
             #26. 用途
             ## 降压变压器以外为不合格数据
-            if self._getcell(row,26)  != self.pms['26']:
-                err_cells.append((row,26))
+            if self._getcell(row,25)  != self.pms['26']:
+                err_cells.append((row,25))
                 the_line_is_error = True
             if the_line_is_error == True:
                 total_error_lines += 1  
              
             #27. 绝缘介质
             ## 油浸以外为不合格数据
-            if self._getcell(row,27) != self.pms['27']:
-                err_cells.append((row,27))
+            if self._getcell(row,26) != self.pms['27']:
+                err_cells.append((row,26))
                 the_line_is_error = True
             
             #28. 绕组型式
             ## "1、双绕组,三绕组以外为不合格数据；
             ## 2、“电压等级”为交流220kV对应三绕组，以外为不合格数据"
-            rzxs = self._getcell(row,28)
+            rzxs = self._getcell(row,27)
             if rzxs not in self.pms['28']: 
                 rzxs_valid = False
-                err_cells.append((row,28))
+                err_cells.append((row,27))
                 the_line_is_error = True
             elif (dydj_valid == True and dydj == u'交流220kV' and rzxs != u'三绕组'):
-                err_cells.append((row,28))
+                err_cells.append((row,27))
                 the_line_is_error = True
             
             #29. 结构型式
             ## 芯式以外为不合格数据
-            if self._getcell(row,29) != self.pms['29']:
-                err_cells.append((row,29))
+            if self._getcell(row,28) != self.pms['29']:
+                err_cells.append((row,28))
                 the_line_is_error = True
                 
             #30. 冷却方式
             ## "1、强迫油循环导向风冷(ODAF)、自然油循环风冷(ONAF)、自然冷却(ONAN)以外为不合格数据；
             ## 2、“设备型号”中有“F”对应自然冷却(ONAN)的数据为不合格数据"
-            lqfs = self._getcell(row,30)
+            lqfs = self._getcell(row,29)
             if (lqfs not in self.pms['30']) or (sbxh.find('F') > -1 and lqfs == u'自然冷却(ONAN)' ):
-                err_cells.append((row,30))
+                err_cells.append((row,29))
                 the_line_is_error = True
                 
             #31. 调压方式    
             ## "1、有载调压、无励磁调压以外为不合格数据；
             ## 2、“设备型号”中有“Z”对应无励磁调压的数据为不合格数据"
             
-            tyfs = self._getcell(row,31)
+            tyfs = self._getcell(row,30)
             if tyfs not in self.pms['31'] or (tyfs.find('Z') > -1 and lyfs == u'无励磁调压'):
-                err_cells.append((row,31))
+                err_cells.append((row,30))
                 the_line_is_error = True
             
             #32. 安装位置
             ##空白为不合格数据
-            if self._getcell(row,32) == '':
-                err_cells.append((row,30))
+            if self._getcell(row,31) == '':
+                err_cells.append((row,21))
                 the_line_is_error = True
                 
             #33. 额定容量(MVA)
             ## 数值类型
             ## 不等于“设备型号”中“/”之前的数值/1000的数据为不合格数据,设备型号类似 SFSZ10-180000/220为180
-            edrl = self._getcell(row,33)
+            edrl = self._getcell(row,32)
             result = True
             if self._isnumber(edrl):
                 edrl = float(edrl)
@@ -323,7 +332,7 @@ class PmsValidate():
    
             
             if result == False:
-                err_cells.append((row,33))
+                err_cells.append((row,32))
                 the_line_is_error = True
              
              
@@ -331,7 +340,7 @@ class PmsValidate():
             ## 为数值类型
             ## "│额定电流-额定容量*1000/额定电压/√3│大于1的数据为不合格数据；不为数字的为不合格数据"
             ## 额定容量为33列
-            eddl = self._getcell(row,14)
+            eddl = self._getcell(row,13)
             result = True
             if not self._isnumber(eddl):
                 eddl_valid = False
@@ -346,7 +355,7 @@ class PmsValidate():
 
             if result == False:
                
-                err_cells.append((row,14))
+                err_cells.append((row,13))
                 the_line_is_error = True
                     
             #34. 自冷却容量(%)
@@ -355,7 +364,7 @@ class PmsValidate():
             ##2、“冷却方式”为自然油循环风冷(ONAF)对应60-75之间，以外的为不合格数据；
             ##3、“冷却方式”为强迫油循环导向风冷(ODAF)对应0,以外的为不合格数据"    
             result = True
-            zlqrl = self._getcell(row,34)
+            zlqrl = self._getcell(row,33)
             if self._isnumber(zlqrl):
                 zlqrl = float(zlqrl)
                 if lqfs == u'自然冷却(ONAN)' and zlqrl != 100:
@@ -368,7 +377,7 @@ class PmsValidate():
                 result = False
                     
             if result == False:
-                err_cells.append((row,34))
+                err_cells.append((row,33))
                 the_line_is_error = True
                 
             #35. 电压比
@@ -380,10 +389,10 @@ class PmsValidate():
             ## 4、±不能填成+-
             ## 5、不能带kV等单位
             ## 6、不能有空格"
-            dyb = self._getcell(row,35)
+            dyb = self._getcell(row,34)
             if re.match(u'[\*x（）+-]+',dyb):
                 #matched means error 
-                err_cells.append((row,35))
+                err_cells.append((row,34))
                 the_line_is_error = True
              
             #36. 额定电流(中压)(A)
@@ -392,7 +401,7 @@ class PmsValidate():
             ## 2、“电压等级”为交流110kV对应额定电流/额定电流(中压)在0.34-0.35之间，以外为不合格数据；
             ## 3、“绕组型式”为双绕组对应/，以外的为不合格数据；；"  
             result = True
-            eddlzy = self._getcell(row,36)
+            eddlzy = self._getcell(row,35)
             if eddlzy == '/':
                 if rzxs_valid == True and rzxs != u'双绕组':
                     result = False
@@ -408,13 +417,13 @@ class PmsValidate():
                     result = False
                             
             if result == False:
-                 err_cells.append((row,36))
+                 err_cells.append((row,35))
                  the_line_is_error = True
                 
             #37. 额定电流(低压)(A)
             ## 数值类型
             ## “电压等级”为交流110kV对应额定电流/额定电流(低压)在0.09-0.1之间，以外为不合格数据；
-            eddldy = self._getcell(row,37)
+            eddldy = self._getcell(row,36)
             result = True
             if not self._isnumber(eddldy):
                 result = False
@@ -424,14 +433,14 @@ class PmsValidate():
                 if dydj == u'交流110kV' and (p < 0.09 or p > 0.1):
                     result = False
             if result == False:
-                err_cells.append((row,37))
+                err_cells.append((row,36))
                 the_line_is_error = True 
                 
             #38. 短路阻抗高压－中压(%)
             ## “绕组型式”为双绕组对应/，以外的为不合格数据；
             ## / 或数值型
             result = True
-            dlkzgy_zy = self._getcell(row,39)
+            dlkzgy_zy = self._getcell(row,37)
             if dlkzgy_zy == '/':
                 if rzxs_valid == True and rzxs != u'双绕组':
                     result = False
@@ -440,13 +449,13 @@ class PmsValidate():
             else:
                 result = False
             if result == False:
-                err_cells.append((row,38))
+                err_cells.append((row,37))
                 the_line_is_error = True
                 
             #39. 短路阻抗高压－低压(%)
             ## 若“短路阻抗高压－中压(%)”不为/的数据应小于对应短路阻抗高压－低压(%)，以外为不合格数据
             # 数值类型
-            dlkzgy_dy = self._getcell(row,39)
+            dlkzgy_dy = self._getcell(row,38)
             result = True
             if not self._isnumber(dlkzgy_dy):
                 result = False
@@ -456,14 +465,14 @@ class PmsValidate():
                     result = False
                     
             if result == False:
-                err_cells.append((row,39))
+                err_cells.append((row,38))
                 the_line_is_error = True 
                 
                 
             #40. 短路阻抗中压－低压(%)    
             ## 数值类型
             ## “绕组型式”为双绕组对应/，以外的为不合格数据；
-            dlkzzy_dy = self._getcell(row,40)
+            dlkzzy_dy = self._getcell(row,39)
             result = True
             if dlkzzy_dy == '/':
                 if rzxs_valid == True and rzxs != u'双绕组':
@@ -474,7 +483,7 @@ class PmsValidate():
                 result = False
                 
             if result == False:
-                err_cells.append((row,40))
+                err_cells.append((row,39))
                 the_line_is_error = True
             
             #42. 负载损耗(实测值)(满载)(kW)
@@ -484,7 +493,7 @@ class PmsValidate():
             ## 3、“电压等级”为交流35kV对应大于19小于等于60之间，以外为不合格数据；"
             result = True
             fzsh_valid = True
-            fzsh = self._getcell(row,42)
+            fzsh = self._getcell(row,41)
             if  self._isnumber(fzsh):
                 fzsh = float(fzsh)
                 if dydj_valid == True:
@@ -497,13 +506,13 @@ class PmsValidate():
                 fzsh_valid = False
                 
             if result == False:
-                err_cells.append((row,42))
+                err_cells.append((row,41))
                 the_line_is_error = True
                 
             #41. 空载损耗(kV)
             ## 数值类型
             ## 大于2/5倍“负载损耗”的数据为不合格数据
-            kzsh = self._getcell(row,41)
+            kzsh = self._getcell(row,40)
             result = True
             if self._isnumber(kzsh):
                 kzsh = float(kzsh)
@@ -513,14 +522,14 @@ class PmsValidate():
                 result = False
             
             if result == False:
-                err_cells.append((row,41))
+                err_cells.append((row,40))
                 the_line_is_error = True
              
             #43. 自然冷却噪声(dB)
             ## 数值类型
             ## "1、“电压等级”为交流220kV或者交流110kV数对应55-65之间，以外为不合格数据；
             ## 3、“电压等级”为交流35kV对应38-45之间，以外为不合格数据；" 
-            zrlqzs = self._getcell(row,43)
+            zrlqzs = self._getcell(row,42)
             result = True
             if self._isnumber(zrlqzs):
                 zrlqzs = float(zrlqzs)
@@ -532,7 +541,7 @@ class PmsValidate():
                 result = False
                 
             if result == False:
-                err_cells.append((row,43))
+                err_cells.append((row,42))
                 the_line_is_error = True
                 
             #46. 油重
@@ -540,7 +549,7 @@ class PmsValidate():
             ## "1、“电压等级”为交流220kV对应大于30小于95之间，以外为不合格数据；
             ## 2、“电压等级”为交流110kV对应大于10小于等于30之间，以外为不合格数据；
             ## 3、“电压等级”为交流35kV对应大于1小于等于10之间，以外为不合格数据；"
-            yz = self._getcell(row,46)
+            yz = self._getcell(row,45)
             result = True
             if self._isnumber(yz):
                 yz = float(yz)
@@ -553,13 +562,13 @@ class PmsValidate():
                 result = False
             
             if result == False:
-                err_cells.append((row,46))
+                err_cells.append((row,45))
                 the_line_is_error = True
                     
             #44.总重(T) 
             ## 数值类型
             ## 小于2.5倍“油重”的为不合格数据
-            zz = self._getcell(row,44)
+            zz = self._getcell(row,43)
             result = True
             if self._isnumber(zz):
                 zz = float(zz)
@@ -569,38 +578,38 @@ class PmsValidate():
                 result = False
                 
             if result == False:
-                err_cells.append((row,44))
+                err_cells.append((row,43))
                 the_line_is_error = True
                 
                 
             #45. 油号
             ## 25以外为不合格数据
-            yh = self._getcell(row,45)
+            yh = self._getcell(row,44)
             if (not self._isnumber(yh)) or int(yh) != 25:
-                err_cells.append((row,45))
+                err_cells.append((row,44))
                 the_line_is_error = True
                 
             #47. 油产地
             ## 不包含“新疆克拉玛依石油”的为不合格数据
-            if self._getcell(row,47).find(self.pms['47']) < 0:
-                err_cells.append((row,47))
+            if self._getcell(row,46).find(self.pms['47']) < 0:
+                err_cells.append((row,46))
                 the_line_is_error = True 
     
             #48. SF6气体额定压力(Mpa)
             ## 不为0的为不合格数据
-            if self._getcell(row,48) != '0':
-                err_cells.append((row,48))
+            if self._getcell(row,47) != '0':
+                err_cells.append((row,47))
                 the_line_is_error = True 
                 
             #49. SF6气体报警压力(Mpa)
             ## 不为0的为不合格数据
-            if self._getcell(row,49) != '0':
-                err_cells.append((row,49))
+            if self._getcell(row,48) != '0':
+                err_cells.append((row,48))
                 the_line_is_error = True  
                 
             #51. 最近投运日期
             ## 空白或早于投运日期的为不合格数据
-            zjtyrq = self._getcell(row,51)
+            zjtyrq = self._getcell(row,50)
             result = True
             if zjtyrq == '':
                 result = False    
@@ -612,7 +621,7 @@ class PmsValidate():
                 except ValueError:
                     result = False
             if result == False:
-                err_cells.append((row,51))
+                err_cells.append((row,50))
                 the_line_is_error = True 
             
             if the_line_is_error == True:
@@ -620,19 +629,26 @@ class PmsValidate():
                         
             # end for 一行校验结束
         #highligh error cells
+        
         if total_error_lines > 0:
+ 
+            towb = copy(self.wb)
+            tows = towb.get_sheet(0)
+            
             for cell in err_cells:
-                self.ws.Cells(cell[0],cell[1]).Interior.ColorIndex = ERROR_COLOR
-            self.wb.Save()
-        self.excel.Application.Quit()
+                #self.ws.Cells(cell[0],cell[1]).Interior.ColorIndex = ERROR_COLOR
+                tows.write(cell[0],cell[1],self._getcell(cell[0],cell[1]),style=ERROR_STYLE)
+            towb.save(self.newfilepath)
+            #self.wb.Save()
+        #self.excel.Application.Quit()
         fd.close()
-        return (total_error_lines,self.nrows)
+        return (total_error_lines,self.nrows,self.newfilepath)
     
 class ExcelHandler():
 
     def __init__(self,geometry='800x600'):
         self.win = Tk()
-        self.win.title('PMS data validation')
+        self.win.title(u'电力设备数据检查程序')
         self.win.geometry(geometry)
         self.info = StringVar()
         self.lb = Label(self.win,textvariable=self.info)
@@ -641,38 +657,93 @@ class ExcelHandler():
 
         self.menubar = Menu(self.win)
 
-        #file menu
-        filemenu = Menu(self.menubar,tearoff=0)
-        filemenu.add_command(label='Open',command=self.openexcel)
-        filemenu.add_separator()
-        filemenu.add_command(label='Exit',command=self.win.quit)
-        self.menubar.add_cascade(label='File',menu=filemenu)
-        #help menu
-        helpmenu = Menu(self.menubar,tearoff=0)
-        helpmenu.add_command(label="About..",command=self.about)
-        helpmenu.add_command(label='Help',command=self.help)
-        self.menubar.add_cascade(label='Help',menu=helpmenu)
+        # 菜单以一览表
+        # 变电台账核查
+        #   - 主变压器
+        #   - 断路器
+        #   - 隔离开关
+        #   - 电流互感器
+        #   - 电压互感器
+        #   - 耦合电容器
+        #   - 所用变
+        #   - 楼地变
+        #   - 母线
+        #   - 电抗器
+        #   - 组合电器
+        #   - 阻波器
+        #   - 放电线圈
+        #   - 电力电缆
+        #   - 接地网
+        #   - 开关柜
+        #   - 避雷器
+        #   - 避雷针
+        #   - 电力电容器
+        #   - 消弧线圈
+        # 输电台账核查
+        #   - 线路
+        #   - 杆塔
+        #   - 绝缘子
+        #   - 金具
+        #   - 辅助设备
+        #   - 导线
+        #   - 电缆
+        #   - 电缆头
+        # 配电台账核查
+        #   - 线路
+        #   - 杆塔
+        #   - 导线
+        #   - 电缆段
+        #   - 柱上变压器
+        #   - 柱上负荷开关
+        #   - 柱上隔离开关
+        #   - 柱上断路器
+        self.menulist = collections.OrderedDict()
+        self.menulist[u'变电台账核查'] = [(u'主变压器','bdtz_zhubianyaqi'),(u'断路器','bdtz_duanluqi'),(u'隔离开关','bdtz_gelikaiguan'),
+                                 (u'电流互感器','bdtz_dianliuhuganqi'),(u'电压互感器','bdtz_dianyahuganqi'),(u'耦合电容器','bdtz_ouhedianrongqi'),
+                                 (u'所用变','bdtz_suoyongbian'),(u'楼地变','bdtz_loudibian'),(u'母线','bdtz_muxian'),(u'电抗器','bdtz_diankangqi'),
+                                 (u'组合电器','bdtz_zuhedianqi'),(u'阻波器','bdtz_zuboqi'),(u'放电线圈','bdtz_fangdianxianquan'),(u'电力电缆','bdtz_dianlidianlan'),
+                                 (u'接地网','bdtz_jiediwang'),(u'开关柜','bdtz_kaiguangui'),(u'避雷器','bdtz_bileizhen'),
+                                 (u'电力电容器','bdtz_dianlidianrongqi'),(u'消弧线圈','bdtz_xiaohuxianquan')]
+        self.menulist[u'输电台账核查']   = [(u'线路','sdtz_xianl(u'),(u'杆塔','sdtz_ganta'),(u'绝缘子','sdtz_jueyuanzi'),(u'金具','sdtz_jinju'),
+                                (u'辅助设备','sdtz_fuzhushebei'),(u'导线','sdtz_daoxian'),(u'电缆','sdtz_dianlan'),(u'电缆头','sdtz_dianlantou')]
+        self.menulist[u'配电台账核查']   =  [(u'线路','pdtz_xianlu'),(u'杆塔','pdtz_ganta'),(u'电缆段','pdtz_dianlanduan'),
+                                (u'柱上变压器','pdtz_zhushangbianyaqi'),(u'柱上负荷开关','pdtz_zhushangfuhekaiguan'),(u'柱上隔离开关','pdtz_zhushanggelikaiguan'),
+                                (u'柱上断路器','pdtz_zhushangduanluqi')]
+        
+        for m in self.menulist.keys():
+            tmp_menu = Menu(self.menubar,tearoff=0)
+            #cascade menu
+            for item in self.menulist[m]:
+                tmp_menu.add_command(label=item[0],command=lambda i=item[1]: self.openexcel(i))
+            self.menubar.add_cascade(label=m,menu=tmp_menu)
+            
+            del tmp_menu
+        
         self.win.config(menu=self.menubar)
         self.win.mainloop()
 
-    def hello(self):
-        print('hello,world!')
 
-    def openexcel(self):
+        
+        
+    def openexcel(self,check_type):
+        
+        #temporary code,remove it in future
+        if check_type != 'bdtz_zhubianyaqi':
+            return False
         #import a excel file
         ftypes=[("97-2003 Excel files",'*.xls'),('2007 Excel files','*.xlsx')]
         fn = tkFileDialog.askopenfilename(parent=self.win,title='Choose a file',filetypes=ftypes)
 
         if fn != '':
             pmshandler = PmsValidate(fn)
-            (total_error_lines,total_lines) = pmshandler.pms_validate()
-            self.info.set("validate %d lines and error lines %d" %(total_lines,total_error_lines))     
+            (total_error_lines,total_lines,newfilepath) = pmshandler.pms_validate()
+            self.info.set(u"共检查 %d 行\n其中包含错误数据的有 %d 行\n 详细情况请打开 %s 文件了解" %(total_lines,total_error_lines,newfilepath))     
         else:
-            print("%s open failed" % fn)
+            self.info.set(u'无法打开 %s' % fn)
 
     def about(self):
         win_about = Toplevel(self.win)
-        lb_about = Label(win_about,text="this is a excel handler program")
+        lb_about = Label(win_about,text=u"电力设备数据检查程序 %f" % __version__)
         lb_about.pack()
 
     def help(self):
@@ -680,11 +751,11 @@ class ExcelHandler():
 
 
 if __name__ == '__main__':
-    #handler= ExcelHandler('600x400')
+    handler= ExcelHandler('600x400')
     #test code
-    begin_time = time.time()
-    curdir=os.getcwd()
-    pmshandler = PmsValidate(os.path.join(curdir,u'主变压器.xls'))
-    pmshandler.pms_validate()
-    estime = time.time() - begin_time
-    print "total use %.1f seconds" % estime
+    # begin_time = time.time()
+    # curdir=os.getcwd()
+    # pmshandler = PmsValidate(os.path.join(curdir,u'主变压器.xls'))
+    # pmshandler.pms_validate()
+    # estime = time.time() - begin_time
+    # print "total use %.1f seconds" % estime

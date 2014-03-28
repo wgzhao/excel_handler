@@ -1,6 +1,6 @@
 # -*- mode: python -*-
 a = Analysis(['main.py'],
-             pathex=['E:\\Codes\\mygithub\\excel_handler'],
+             pathex=['F:\\Codes\\mygithub\\excel_handler'],
              hiddenimports=[],
              hookspath=None,
              runtime_hooks=None)
