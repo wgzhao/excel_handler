@@ -1,9 +1,7 @@
 # -*- coding:utf-8 -*-
 import os
 #import win32com.client as win32
-import xlrd
-from xlwt import Workbook,easyxf
-from  xlutils.copy import copy
+
 import sys
 import time
 import shutil
@@ -11,26 +9,12 @@ import collections
 codec=sys.getfilesystemencoding()
 reload(sys) 
 sys.setdefaultencoding("utf-8")
-ERROR_STYLE = easyxf('pattern:pattern solid,fore_colour yellow;')    
-class Validate():
+  
+from base import PmsBase
+class Validate(PmsBase):
     
-    def __init__(self,filepath):
-        #duplicate filname
-        filename,fileext = os.path.splitext(filepath)
-        self.newfilepath = filename + u'_valid' + fileext
-        #shutil.copyfile(filepath,self.newfilepath)
-        # self.excel = win32.gencache.EnsureDispatch('Excel.Application')
-        # self.wb = self.excel.Workbooks.Open(newfilepath)
-        # self.excel.Visible = False
-        # self.ws = self.wb.Worksheets(1)
-        # self.ws.Activate()
-        # self.nrows = self.ws.UsedRange.Rows.Count
-        # self.ncols = self.ws.UsedRange.Columns.Count
-        self.wb = xlrd.open_workbook(filepath,formatting_info=True)
-        self.ws = self.wb.sheet_by_index(0)
-        self.nrows = self.ws.nrows
-        self.ncols = self.ws.ncols
-        # 基本校验规则
+            
+    def validate(self):
         self.pms={'1':[u'#1主变',u'#2主变',u'#3主变'],'2':[u'#1主变压器',u'#2主变压器',u'#3主变压器'],'6':u'省（直辖市、自治区）公司',
             '7':[u'国网湖南省电力公司',u'湖南省电力公司'],'9':[u'交流220kV',u'交流110kV',u'交流35kV'],'11':u'三相','12':u'ABC相',
             '20':u'中国','23':u'户外式','24':[u'A',u'B'],'26':u'降压变压器','27':u'油浸','28':[u'双绕组',u'三绕组'],
@@ -44,19 +28,6 @@ class Validate():
         self.sbxh_dict = {u'交流220kV':['180000/220','120000/220','240000/220'],
                          u'交流110kV':['20000/110','31500/110','50000/110'],
                          u'交流35kV':['3150/35','4000/35','5000/35','6300/35','10000/35']}
-  
-    def _getcell(self,row,col):
-        return  self.ws.cell(row,col).value.strip()
-
-    def _isnumber(self,s):
-        #一个字符串是否是数字
-        try:
-            k = float(s)
-            return True
-        except ValueError:
-            return False
-            
-    def validate(self):
         
         #错误单元格列表，记录行列值，用于最后的涂色
         err_cells = []
