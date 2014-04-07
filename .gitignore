@@ -1,3 +1,4 @@
 *.log
-*.xls
 *.pyc
+*_valid.xls
+pmsconfig.py
