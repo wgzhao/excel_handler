@@ -262,6 +262,247 @@ class Validate():
                 err_cells.append((row,24))
                 the_line_is_error = True
                 
-                
-                
+            #27. 结构形式
+            ## 1.空白项为不合格数据；；      
+            ## 2.组合设备类型中“组合电器”对应“电磁式”，否则为不合格数据  
+            ## 3.设备型号以“J”开头的TV，应为“电磁式”，型号以“T”开头的TV，应为“电容式”  ，否则为不合格数据
+            ## 4.电压等级10kV对应“电磁式”，否则为不合格数据"
             
+            jgxs = self._getcell(row,27)
+            result = True
+            if jgxs == '':
+                result = False
+            elif zhsblx == u'组合电器' and jgxs != u'电磁式':
+                result = False
+            elif ( sbxh[0].upper() == 'J' and jgxs != u'电磁式') or ( sbxh[0].upper() == 'T' and jgxs != u'电容式'):
+                result = False
+            elif dydj == u'交流10kV' and jgxs != u'电磁式':
+                result = False
+                    
+            if result == False:
+                err_cells.append((row,27))
+                the_line_is_error = True
+                
+                
+            #25. 绝缘介质
+            ## 1.空白项为不合格数据；      
+            ## 2.结构型式为“电容式”，绝缘介质类型应为“油浸”，否则为不合格数据；    
+            ## 3.组合设备类型中“组合电器”对应“SF6”，否则为不合格数据"    
+            
+            jyjz = self._getcell(row,25)
+            result = True
+            
+            if jyjz == '':
+                result = False
+            elif jgxs == u'电容式' and jyjz != u'油浸':
+                result = False
+            elif zhsblx == u'组合电器' and jyjz != u'SF6':
+                result = False
+                
+            if result == False:
+                err_cells.append((row,25))
+                the_line_is_error = True
+                
+            #26. 外绝缘型式
+            ## 1.空白项为不合格数据；       
+            ## 2.组合设备类型中“组合电器”对应“环氧树脂”，否则为不合格数据   
+            
+            wjyxs = self._getcell(row,26)
+            if wjyxs ==''  or (zhsblx == u'组合电器' and wjyxs != u'环氧树脂'):
+                err_cells.append((row,26))
+                the_line_is_error = True
+                
+            #28. 铁芯结构
+            ## 1.空白项为不合格数据；     
+            ## 2.相数“单相”对应“单柱式”，否则为不合格数据
+            ## 3.电压等级110kV、220kV对应“单柱式”，否则为不合格数据
+            
+            txjg = self._getcell(row,28)
+            if (txjg == '') or ((xiangshu == u'单相'  or dydj in [u'交流220kV',u'交流110kV']) and txjg != u'单柱式'):
+                err_cells.append((row,28))
+                the_line_is_error = True
+            
+            #29. 是否全绝缘
+            ## 1.空白项为不合格数据；     
+            ## 2.电压等级110kV、220kV对应“否”，否则为不合格数据
+            
+            sfqjy = self._getcell(row,29)
+            if (sfqjy == '') or (dydj in [u'交流220kV',u'交流110kV'] and sfqjy != u'否'):
+                err_cells.append((row,28))
+                the_line_is_error = True
+                
+            #30. 额定电压比
+            ## 1.空白项为不合格数据；      
+            ## 2.其中含有“kV”为不合格数据；
+            ## 3.第一个“/”前的数值与电压等级应相等，否则为不合格数据"
+            eddyb = self._getcell(row,30)
+            result = True
+            if eddyb == '':
+                result = False
+            elif eddyb.upper().find('KV') > -1:
+                result = False
+            else:
+                eddyb_v = u"交流%skV" % eddyb.split('/')[0]
+                if eddyb_v != dydj:
+                    result = False
+                    
+            if result == False:
+                err_cells.append((row,30))
+                the_line_is_error = True
+                
+            #31. 二次绕组总数量
+            ## 1.空白项为不合格数据
+            ## 2.二次绕组总数量与额定电压比中“0.1”的个数相等，否则为不合格数据
+            import re
+            ecrzzsl = self._getcell(row,31)
+            result = True
+            if ecrzzsl == '' or not self._isnumber(ecrzzsl)
+                result = False
+            else:
+                try:
+                    if len(re.findall('0.1',eddyb)) != int(ecrzzsl):
+                        result = False
+                except Exception:
+                    pass
+                    
+            if result == False:
+                err_cells.append((row,31))
+                the_line_is_error = True
+                
+            #32. 爬电比距(mm/kV)
+            ## 1.空白项为不合格数据      
+            ## 2.组合设备类型中为“组合电器”的填写“0” ，否则为不合格数据  
+            ## 3.组合设备类型中不为“组合电器”中电压等级10kV对应16、20，35kV对应20、25，110kV、220kV对应25、31，否则为不合格数据
+            v = {u'交流10kV':['16','20'],u'交流35kV':['20','25'],u'交流100kV':['25','31'],u'交流220kV':['25','31']}
+        
+            pdbj = self._getcell(row,32)
+            result = True
+            if pdbj == '':
+                result = False
+            elif zhsblx == u'组合电器' and pdbj != '0':
+                result = False
+            elif zhsblx != u'组合电器' and pdbj not in v[dydj]:
+                result = False
+                
+            if result == False:
+                err_cells.append((row,32))
+                the_line_is_error = True
+            
+            #33. 总额定电容量(pF)
+            ## 1.空白项为不合格数据；
+            ## 2.结构型式为“电磁式”对应“0”，结构型式为“电容式”对应大于1000，否则为不合格数据
+            zeddrl = self._getcell(row,33)
+            result = True
+            if not self._isnumber(zeddrl):
+                result = False
+            else:
+                zeddrl_numeric = float(zeddrl)
+                if (jgxs == u'电磁式' and zeddrl_numeric != 0) or (jgxs == u'电容式' and zeddrl_numeric <= 1000):
+                    result = False
+                    
+            if result == False:
+                err_cells.append((row,33))
+                the_line_is_error = True
+                
+            #34. 电容器节数(节)
+            ## 1.空白项为不合格数据      
+            ## 2.结构型式为“电磁式”对应“0”，否则为不合格数据；
+            ## 3.结构型式为“电容式”，电压等级220kV对应1或者2，其他等级为“1”，否则为不合格数据
+            
+            drqjs = self._getcell(row,34)
+            result = True
+            if not drqjs.isdigit():
+                result = False
+            elif jgxs == u'电磁式' and drqjs != '0':
+                result = False
+            elif jgxs == u'电容式' and ((dydj == u'交流220kV' and drqjs not in ['1','2']) or (dydj != u'交流220kV' and drqjs != '1')):
+                result = False
+                
+            if result == False:
+                err_cells.append((row,34))
+                the_line_is_error = True
+                
+                
+            #35. 上节电容量(pF)
+            ## 1.空白项为不合格数据     
+            ## 2.结构型式为“电磁式”对应“0”；           
+            ## 3.结构型式为“电容式”，电容器节数为2节，数值应大于总额定容量，否则为不合格数据；
+            ## 3.结构型式为“电容式”，电容器节数为1节，数值应为0，否则为不合格数据；
+            sjdrl = self._getcell(row,35)
+            result = True
+            if not sjdrl.isdigit():
+                result = False
+            else:
+                sjdrl_numeric = int(sjdrl)
+                if jgxs == u'电磁式' and drqjs == '2' and sjdrl_numeric <= zeddrl_numeric:
+                    result = False
+                elif jgxs == u'电容式' and drqjs == '1' and sjdrl_numeric != 0:
+                    result = False
+                    
+            if result == False:
+                err_cells.append((row,35))
+                the_line_is_error = True
+                
+            #36. 中节电容量(pF)
+            ## 1.统一填“0”，否则为不合格数据；
+            if self._getcell(row,36) != '0':
+                err_cells.append((row,36))
+                the_line_is_error = True
+            
+            #38. 下节C2电容量(pF)
+            ## 1.不应有空白项；     
+            ## 2.结构型式为“电磁式”对应“0”；           
+            ## 3.结构型式为“电容式”，应大于总额定电容量，否则为不合格数据
+            xjc2drl = self._getcell(row,38)
+            result = True
+            if not self._isnumber(xjc2drl):
+                result = False
+            elif jgxs == u'电磁式' and xjc2drl != '0':
+                result = False
+            elif jgxs == u'电容式' and float(xjc2drl) <= zeddrl_numeric:
+                result = False
+                
+            if result == False:
+                err_cells.append((row,38))
+                the_line_is_error = True
+                      
+            #37. 下节C1电容量(pF)
+            ## 1.空白项为不合格数据      
+            ## 2.结构型式为“电磁式”对应“0”；           
+            ## 3.结构型式为“电容式”，应大于总额定电容量，否则为不合格数据； 
+            ## 4.下节C1电容量应小于下节C2电容量，否则为不合格数据
+            
+            xjc1drl = self._getcell(row,37)
+            result = True
+            if not self._isnumber(xjc1drl):
+                result = False
+            elif jgxs == u'电磁式' and xjc1drl != '0':
+                result = False
+            else:
+                xjc1drl_numeric = float(xjc1drl)
+                if jgxs == u'电容式' and xjc1drl_numeric <= zeddrl_numeric:
+                    result = False
+                elif xjc1drl_numeric > float(xjc2drl):
+                    result = False
+                    
+            if result == False:
+                err_cells.append((row,37))
+                the_line_is_error = True
+                
+            #39. 油号
+            ## 1.空白项为不合格数据
+            ## 2、绝缘介质为油浸、油浸式此字段25以外为不合格数据；
+            ## 3、绝缘介质非“油浸”、“油浸式”此字段“无”、“/”以外为不合格数据"
+            youhao = self._getcell(row,39)
+            result = True
+            if youhao == '':
+                result = False
+            elif jyjz in [u'油浸',u'油浸式'] and youhao != '25':
+                result = False
+            elif yjjz not in [u'油浸',u'油浸式'] and youhao not in [u'无','/']:
+                result = False
+            
+            if result == False:
+                err_cells.append((row,39))
+                the_line_is_error = True
+                
