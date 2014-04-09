@@ -9,9 +9,11 @@ import collections
 codec=sys.getfilesystemencoding()
 reload(sys) 
 sys.setdefaultencoding("utf-8")
+  
+from base import PmsBase
 
-class Validate():
-    def validate():
+class Validate(PmsBase):
+    def validate(self):
         '''
         电压互感器数据校验
         '''
@@ -22,13 +24,15 @@ class Validate():
         ## Notice: 下标从0开始，即第一个单元坐标为(0,0)
         self.pms={'5':u'省（直辖市、自治区）公司',
             '6':[u'国网湖南省电力公司',u'湖南省电力公司'],'8':[u'交流220kV',u'交流110kV',u'交流35kV',u'交流10kV'],
-            '19':u'中国','22':u'户外式','23':[u'A',u'B'],'25':u'降压变压器','26':u'油浸','27':[u'双绕组',u'三绕组'],
-            '28':u'芯式','29':[u'强迫油循环导向风冷(ODAF)',u'自然油循环风冷(ONAF)',u'自然冷却(ONAN)'],'30':[u'有载调压',u'无励磁调压'],
+            '18':u'中国','22':u'户外式','23':[u'A',u'B'],'25':u'降压变压器','26':u'油浸','27':[u'双绕组',u'三绕组'],
+            '28':u'芯式',
             '46':u'新疆克拉玛依石油'}
         
         #出产编号，用于校验是否有重复的出厂编号,为保证下标从1开始,第一个元素为虚构元素
         ccbh_list = ['this is sheet header,ignore it']
         
+        #查找数字
+        find_digits = re.compile(r'\d+')
         #skip header
         fd = open('validate.log','w')
         for row in range(1,self.nrows):
@@ -41,10 +45,17 @@ class Validate():
             # 与设备名称(第一列)中数字不一致为不合格数据
             ## 分别取出设备名称和运行编号的数字（一般数字在开头)
             sbmc = self._getcell(row,0)
-            sbmc_digital = re.findall(r'\d+',sbmc)[0]
-            yxbm_digital = re.findall(r'\d+',self._getcell(row,1))[0]
-            
-            if sbmc_digital != yxbm_digital:
+            result = True
+            try:
+                sbmc_digital = find_digits.findall(sbmc)[0] #re.findall(r'\d+',sbmc)[0]
+                yxbh_digital = find_digits.findall(self._getcell(row,1))[0] 
+                if sbmc_digital != yxbh_digital:
+                    result = False
+            except IndexError,err:
+                #print "sbmc = %s and yxbh = %s" %(sbmc,self._getcell(row,1))
+                result = False
+                
+            if result == False:
                 err_cells.append((row,1))
                 the_line_is_error = True
                 
@@ -184,7 +195,7 @@ class Validate():
 
             #18. 制造国家
             ## 中国以外为不合格数据
-            if self._getcell(row,18) != self.pms['20']:
+            if self._getcell(row,18) != self.pms['18']:
                 err_cells.append((row,18))
                 the_line_is_error = True
             
@@ -353,10 +364,9 @@ class Validate():
             #31. 二次绕组总数量
             ## 1.空白项为不合格数据
             ## 2.二次绕组总数量与额定电压比中“0.1”的个数相等，否则为不合格数据
-            import re
             ecrzzsl = self._getcell(row,31)
             result = True
-            if ecrzzsl == '' or not self._isnumber(ecrzzsl)
+            if ecrzzsl == '' or not self._isnumber(ecrzzsl):
                 result = False
             else:
                 try:
@@ -373,15 +383,18 @@ class Validate():
             ## 1.空白项为不合格数据      
             ## 2.组合设备类型中为“组合电器”的填写“0” ，否则为不合格数据  
             ## 3.组合设备类型中不为“组合电器”中电压等级10kV对应16、20，35kV对应20、25，110kV、220kV对应25、31，否则为不合格数据
-            v = {u'交流10kV':['16','20'],u'交流35kV':['20','25'],u'交流100kV':['25','31'],u'交流220kV':['25','31']}
+            v = {u'交流10kV':['16','20'],u'交流35kV':['20','25'],u'交流110kV':['25','31'],u'交流220kV':['25','31']}
         
             pdbj = self._getcell(row,32)
             result = True
-            if pdbj == '':
-                result = False
-            elif zhsblx == u'组合电器' and pdbj != '0':
-                result = False
-            elif zhsblx != u'组合电器' and pdbj not in v[dydj]:
+            try:
+                if pdbj == '':
+                    result = False
+                elif zhsblx == u'组合电器' and pdbj != '0':
+                    result = False
+                elif zhsblx != u'组合电器' and pdbj not in v[dydj]:
+                    result = False
+            except Exception,err:
                 result = False
                 
             if result == False:
@@ -499,10 +512,74 @@ class Validate():
                 result = False
             elif jyjz in [u'油浸',u'油浸式'] and youhao != '25':
                 result = False
-            elif yjjz not in [u'油浸',u'油浸式'] and youhao not in [u'无','/']:
+            elif jyjz not in [u'油浸',u'油浸式'] and youhao not in [u'无','/']:
                 result = False
             
             if result == False:
                 err_cells.append((row,39))
                 the_line_is_error = True
+            
+            #41. SF6气体报警压力(Mpa)
+            ## 1.空白项为不合格数据      
+            ## 2.绝缘介质为“SF6”，数值在0.30至0.60之间，其余绝缘介质的填“0”，否则为不合格数据； ；  
+            sf6qtbjyl = self._getcell(row,41)
+            result = True
+            if not self._isnumber(sf6qtbjyl):
+                result = False
+            else:
+                sf6qtbjyl_numeric = float(sf6qtbjyl) 
+                if (jyjz == u'SF6' and (sf6qtbjyl_numeric < 0.30 or sf6qtbjyl_numeric > 0.60)) or \
+                       (jyjz != u'SF6' and sf6qtbjyl_numeric != 0):
+                       result = False
+            if result == False:
+                err_cells.append((row,41))
+                the_line_is_error = True
+                
+            #40. SF6气体额定压力(Mpa)
+            ## 1.空白项为不合格数据  
+            ## 2.绝缘介质为“SF6”，数值在0.35至0.65之间，其余绝缘介质的填“0”，否则为不合格数据； 
+            ## 3.SF6气体额定压力应大于SF6气体报警压力，否则为不合格数据
+            sf6qtedyl = self._getcell(row,40)
+            result = True
+            if not self._isnumber(sf6qtedyl):
+                result = False
+            else:
+                sf6qtedyl_numeric = float(sf6qtedyl)
+                if sf6qtedyl_numeric >0 and sf6qtedyl_numeric <= sf6qtbjyl_numeric:
+                    result = False
+                if (jyjz == u'SF6' and (sf6qtedyl_numeric < 0.30 or sf6qtedyl_numeric > 0.60)) or \
+                    (jyjz != u'SF6' and sf6qtedyl_numeric != 0):
+                    result = False
+                    
+            if result == False:
+                err_cells.append((row,40))
+                the_line_is_error = True
+                
+            #43. 最近投运日期
+            ## 空白或早于投运日期的为不合格数据
+            zjtyrq = self._getcell(row,43)
+            result = True
+            # 计算投运日期
+            tyrq_ts = time.mktime(time.strptime(self._getcell(row,20),'%Y-%m-%d %H:%M:%S'))
+            if zjtyrq == '':
+                result = False    
+            else:
+                try:
+                    zjtyrq_ts = time.mktime(time.strptime(zjtyrq,'%Y-%m-%d %H:%M:%S'))
+                    if tyrq_ts and zjtyrq_ts < tyrq_ts:
+                        result = False
+                except ValueError:
+                    result = False
+            if result == False:
+                err_cells.append((row,43))
+                the_line_is_error = True 
+            
+            if the_line_is_error == True:
+                total_error_lines += 1
+                        
+            # end for 一行校验结束
+        
+        fd.close()
+        #错误行数，总行数，错误单元列表
+        return (total_error_lines,self.nrows,err_cells)    
                 

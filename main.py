@@ -159,8 +159,8 @@ def test():
     (total_error_lines,total_lines,err_cells) = pmshandler.validate()
     print "total error lines = %d / total lines %d" % (total_error_lines,total_lines)
 if __name__ == '__main__':
-    #handler= ExcelHandler('600x400')
-    test()
+    handler= ExcelHandler('600x400')
+    #test()
     #test code
     # begin_time = time.time()
     # curdir=os.getcwd()
